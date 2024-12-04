@@ -23,7 +23,7 @@ use anchor_spl::associated_token::{
 use borsh::BorshDeserialize;
 pub use pumpfun_cpi as cpi;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
-use std::rc::Rc;
+use std::{rc::Rc, str::FromStr};
 
 /// Configuration for priority fee compute unit parameters
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,15 +260,18 @@ impl<'a> PumpFun<'a> {
         amount_sol: u64,
         slippage_basis_points: Option<u64>,
         priority_fee: Option<PriorityFee>,
+        create_ata: bool,
     ) -> Result<Signature, error::ClientError> {
         // Get accounts and calculate buy amounts
-        let global_account = self.get_global_account()?;
+        // let global_account = self.get_global_account()?;
         let bonding_curve_account = self.get_bonding_curve_account(mint)?;
         let buy_amount = bonding_curve_account
             .get_buy_price(amount_sol)
             .map_err(error::ClientError::BondingCurveError)?;
         let buy_amount_with_slippage =
             utils::calculate_with_slippage_buy(buy_amount, slippage_basis_points.unwrap_or(500));
+        println!("buy amount: {:?}", buy_amount);
+        println!("buy amount with slippage: {:?}", buy_amount_with_slippage);
 
         let mut request = self.program.request();
 
@@ -285,9 +288,7 @@ impl<'a> PumpFun<'a> {
             }
         }
 
-        // Create Associated Token Account if needed
-        let ata: Pubkey = get_associated_token_address(&self.payer.pubkey(), mint);
-        if self.rpc.get_account(&ata).is_err() {
+        if create_ata {
             request = request.instruction(create_associated_token_account(
                 &self.payer.pubkey(),
                 &self.payer.pubkey(),
@@ -300,7 +301,7 @@ impl<'a> PumpFun<'a> {
         request = request.instruction(instruction::buy(
             self.payer,
             mint,
-            &global_account.fee_recipient,
+            &Pubkey::from_str("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM").unwrap(),
             cpi::instruction::Buy {
                 _amount: buy_amount,
                 _max_sol_cost: buy_amount_with_slippage,
